@@ -11,10 +11,12 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class TelegramBot extends TelegramLongPollingBot {
     private Map<Long, Double> userBalances = new HashMap<>();
     private Map<Long, String> userStates = new HashMap<>();
+    private Map<Long, List<String>> userDebtors = new HashMap<>();
 
     @Override
     public void onUpdateReceived(Update update) {
@@ -41,7 +43,6 @@ public class TelegramBot extends TelegramLongPollingBot {
         switch (callbackData) {
             case "ПОЛУЧИЛ":
                 userStates.put(chatId, "AWAITING_INCOME_AMOUNT");
-
                 SendMessage inMessage = new SendMessage();
                 inMessage.setChatId(chatId);
                 inMessage.setText("Enter the amount you earned:");
@@ -56,9 +57,20 @@ public class TelegramBot extends TelegramLongPollingBot {
                 SendMessage message = new SendMessage();
                 message.setChatId(chatId);
                 message.setText("Enter the amount you have spent:");
-
                 try {
                     execute(message);
+                } catch (TelegramApiException e) {
+                    e.printStackTrace();
+                }
+                break;
+
+            case "ДОЛЖНИК":
+                userStates.put(chatId, "AWAITING_DEBTOR");
+                SendMessage inMessage1 = new SendMessage();
+                inMessage1.setChatId(chatId);
+                inMessage1.setText("Enter the name, date and how much he borrow:");
+                try {
+                    execute(inMessage1);
                 } catch (TelegramApiException e) {
                     e.printStackTrace();
                 }
@@ -74,11 +86,17 @@ public class TelegramBot extends TelegramLongPollingBot {
         double currentBalance = userBalances.getOrDefault(chatId, 0.0);
 
         String formattedBalance = String.format("%.2f", currentBalance);
+        List<String> debtorsList = userDebtors.getOrDefault(chatId, new ArrayList<>());
+
+        String debtorInfo = debtorsList.isEmpty() ?
+                "No debtors" :
+                String.join("\n", debtorsList);
+
 
         SendMessage summaryMessage = new SendMessage();
         summaryMessage.setChatId(chatId);
         summaryMessage.setText("Balance\n\n" +
-                "Current balance: " + formattedBalance + " $.");
+                "Current balance: " + formattedBalance + " $." + "Your debtors: " + debtorInfo);
         try {
             execute(summaryMessage);
         } catch (TelegramApiException e) {
@@ -147,6 +165,43 @@ public class TelegramBot extends TelegramLongPollingBot {
                 e.printStackTrace();
             }
         }
+        else if ("AWAITING_DEBTOR".equals(userStates.get(chatId))) {
+            try {
+                String debtorInfo = inputText.trim();
+
+                // Получаем текущий список должников или создаем новый
+                List<String> currentDebtors = userDebtors.getOrDefault(chatId, new ArrayList<>());
+
+                // Добавляем нового должника в список
+                currentDebtors.add(debtorInfo);
+
+                // Сохраняем обновленный список
+                userDebtors.put(chatId, currentDebtors);
+
+                userStates.remove(chatId);
+
+                SendMessage confirmation = new SendMessage();
+                confirmation.setChatId(chatId);
+                confirmation.setText("Your Debtor: " + debtorInfo);
+
+                sendHelpMessage(chatId);
+
+                execute(confirmation);
+
+            } catch (NumberFormatException e) {
+                SendMessage error = new SendMessage();
+                error.setChatId(chatId);
+                error.setText("Please enter the correct number");
+
+                try {
+                    execute(error);
+                } catch (TelegramApiException ex) {
+                    ex.printStackTrace();
+                }
+            } catch (TelegramApiException e) {
+                e.printStackTrace();
+            }
+        }
     }
     
 
@@ -188,8 +243,13 @@ public class TelegramBot extends TelegramLongPollingBot {
         inlineKeyboardButton3.setText("balance");
         inlineKeyboardButton3.setCallbackData("СВОДКА");
 
+        InlineKeyboardButton inlineKeyboardButton4 = new InlineKeyboardButton();
+        inlineKeyboardButton4.setText("Debtor");
+        inlineKeyboardButton4.setCallbackData("ДОЛЖНИК");
+
 
         rowInline2.add(inlineKeyboardButton3);
+        rowInline2.add(inlineKeyboardButton4);
 
         rowsInline.add(rowInline1);
         rowsInline.add(rowInline2);
@@ -205,11 +265,11 @@ public class TelegramBot extends TelegramLongPollingBot {
     
     @Override
     public String getBotUsername() {
-        return "YourBotName";
+        return "@AgregatorPriceForYou_bot";
     }
 
     @Override
     public String getBotToken() {
-        return "YourBotToken";
+        return "8437355068:AAHnzXW8GhL_zzT12LQTM1-ubEB-JYKDKY0";
     }
 }
